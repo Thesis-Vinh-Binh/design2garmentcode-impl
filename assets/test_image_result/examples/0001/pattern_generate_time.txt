@@ -1,0 +1,1 @@
+pattern_generate_time：22.0316 s

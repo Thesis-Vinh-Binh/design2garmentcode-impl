@@ -1,1 +1,5 @@
 *.pth
+.env
+__pycache__/
+logs/
+lmm_utils/Qwen/

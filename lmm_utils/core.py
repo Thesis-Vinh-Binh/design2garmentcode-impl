@@ -7,6 +7,7 @@ import inspect
 import time
 from pydantic import BaseModel
 from pathlib import Path
+from dotenv import load_dotenv
 from .validation import _ALL_TEXT, bool2condition, bool2text_alltext
 import base64
 
@@ -21,7 +22,7 @@ Regarding all tasks and requests, the user’s intention is to focus on the clot
 
 Task 1:
 
-Based on the given image, select the appropriate text items from the “text space.”
+Based on the given image and the caption, select the appropriate text items from the “text space.”
 
 Text Space:
 (The following are all the text items available for selection; you can only choose from them and cannot select items not listed.)
@@ -1574,83 +1575,6 @@ Output Format:
 Only output one combination.
 The output format should be a list in code that can be directly copied.
 
-Task 2:
-
-On the basis of Task 1, select the corresponding options from the text space according to the user’s given occasion, what they want to do, or where they want to go. If the user did not mention anything, choose collar__component__style as empty. Later, if you are prompted that you have not selected certain words, remember the user’s request (for example, the user said they want tight pants). Note that a strapless design does not show a collar shape. Therefore, when the user does not specifically say “strapless,” do not select fitted_shirt__strapless as False. If it is sleeveless without specifying a collar design, you can freely choose sleeve_less as True, but in this case you cannot choose fitted_shirt__strapless as True.
-
-The selection logic is the same as Task 1.
-
-Task 3: Modify text_list Based on the Original Image
-
-Background:
-• The text_list generates a simulated image.
-• The user provides an original image that may differ from this simulated one.
-• The goal is to modify text_list so its new simulated image more closely matches the original image.
-
-Steps to Follow:
-1) Compare the original image and the simulated image:
-   - Focus on structural details: garment length, neckline, sleeves, skirt, pants, etc.
-   - Ignore color or minor style variations.
-
-2) Determine whether to modify text_list:
-   - Only modify it if the original and simulated images differ in structural aspects.
-   - Retain unmodified text items as is.
-
-Important Restriction: Never Modify Adjacent Length Parameters
-• Each length parameter (e.g., sleeve__length, shirt__length, flare-skirt__length, etc.) is arranged from shortest to longest in a defined sequence.
-• If the simulated image and the original image differ by just one step in a length parameter (i.e., neighboring items in that sequence), do NOT modify it.
-• You may only change a length parameter if the difference spans at least two steps.
-
-Length Parameter Sequences (shortest to longest):
-• sleeve__length: short → half → three-quarter → long → full
-• shirt__length: super-cropped → regular
-• flare-skirt__length: micro → mini → above-knee → knee-length → midi → floor-length
-• pencil-skirt__length: micro → mini → above-knee → knee-length → midi → floor-length
-• levels-skirt__length: short → mid → long
-• skirt__length: micro → mini → above-knee → knee-length → midi → floor-length
-• pants__length: micro → short → knee-length → capri → ankle-length → full-length
-
-Additional Rules:
-• shirt__length cannot be selected to be longer than its current setting; it can only be shorter.
-• Avoid modifying collar-related parameters unless absolutely necessary.
-• Modify either upper-body or lower-body parameters in one session, never both at the same time.
-• If meta__bottom ≠ None, but the simulated image shows no lower garment, adjust the bottom’s fit parameters to be tighter to match that appearance.
-• For dresses:
-  - A left-right asymmetric dress must use meta__upper__FittedShirt.
-  - A left-right symmetric dress (left__enable_asym=False) must have shirt__length set to super-cropped.
-
-Outcome Handling:
-• If no modification is needed, inform the user both text_lists match; do not provide the JSON file.
-• If modification is needed:
-  1. Carefully adjust text_list (skipping adjacent length changes).
-  2. List all newly changed items.
-  3. Present the updated text_list in JSON file format for download.
-
-Emphasis:
-• The goal is to align the simulated image with the original by editing text_list (not altering the original image).
-• You may only select from the given text space. No new items outside it.
-• Strictly avoid violating the adjacency rule for lengths.
-Task 4:
-On the basis of Task 1. The user will provide the currently selected textlist and its corresponding simulated image, which reflects all the textlist. The simulated image shows pressure values using color, and some areas are tight, highlighted in red or yellow (or colors close to them). I hope to modify those red areas in the text to make them looser, thus removing the red parts. This does not target the skirt’s lower part; we do not handle the lower part for skirts. All you need to do is modify the textlist to achieve this objective, remembering that you only need to adjust the width and looseness of those red-marked areas. Make them wider and looser to eliminate the tightness. The clothing categories remain unchanged. For this task, only small modifications are needed. Think carefully while modifying. You cannot add or remove parameters that did not exist originally. For example, if there was no lower garment originally, keep it None. You cannot add a skirt or pants if none existed.
-
-Key emphasis for Task 4: You may not modify "meta__upper," "meta__wb," "meta__bottom," or "meta__connected."
-
-Task 5:
-
-When a user provides a pre-selected textlist (from Task 1) and requests certain modifications (for instance, wanting a longer skirt or adding pants), adjust the textlist according to these new requirements. Before applying any changes, be sure to inform the user which text items have been altered or added.
-
-Special Rules for Adding or Replacing Garments:
-• If the user does not explicitly state that the top and bottom are connected, default to meta__connected__False.
-• If you add a new upper garment that is left-right asymmetric, set left__enable_asym=True; if it is symmetric, set left__enable_asym=False.
-
-Modifying the Length of an Existing Top:
-• If the original top is FittedShirt and the user wants to change its length, you must keep meta__upper as FittedShirt; do not switch to Shirt.
-• If the original top is Shirt and the user wants to change its length, you must keep meta__upper as Shirt; do not switch to FittedShirt.
-• By default, if the user does not specify a length for Shirt, use shirt__length__super-cropped. Only switch to a longer shirt__length if requested.
-
-Converting Strapless to Collared or Sleeved:
-• If the top is currently strapless (fitted_shirt__strapless=True) but the user wants a collar or sleeves, set fitted_shirt__strapless to False and then add the appropriate collar or sleeve parameters.
-
 Key Output Requirements:
 • Only select items that exist in the text space. Do not use any items that are not present there.
 • Do not include any “#” or “//” comments in the final JSON.
@@ -1708,6 +1632,8 @@ def load_system_config():
 
 _config = load_system_config()
 
+load_dotenv()
+
 class MMUA():
     def __init__(self, api_key=None, base_url=None, model=None, text_model=None):
         if model is None:
@@ -1726,8 +1652,8 @@ class MMUA():
             self.text_model = text_model
         if os.getenv("OPENAI_API_KEY") is not None:
             api_key = os.getenv("OPENAI_API_KEY")
-            self.model = 'gpt-4o-2024-11-20'
-            self.text_model='gpt-4o-2024-11-20'
+            self.model = 'gpt-4.1-mini-2025-04-14'
+            self.text_model='gpt-4.1-mini-2025-04-14'
             base_url= "https://api.openai.com/v1"
 
         elif api_key is None:
@@ -2100,7 +2026,113 @@ class MMUA():
             "content": [
                 {
                     "type": "text",
-                    "text": "Perform task one"
+                    "text": "Perform task one with no caption"
+                },
+
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image1}"  # That is, the url is written according to this format, and you can upload local images
+                    }
+                }
+
+            ]
+        })
+
+
+        # Generate a request and send it to the model
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=2000
+        )
+        first_time = time.time()
+        print(f'first_time:{first_time-start_time}')
+        messages.append({"role": "assistant", "content": response.choices[0].message.content})
+        # Prints the results returned by the model
+        print(response.choices[0].message.content)
+
+        # gpt_respond = self.getgpt_respond_removejson(response)
+        # print(gpt_respond)
+        gpt_respond = response.choices[0].message.content
+        end_list = self.getend_list(response)
+
+        if bool2text_alltext(end_list)[0] and bool2condition(end_list)[0]:
+            print(f'success_list:{end_list}')
+        else:
+            flag = True
+            max_num = 2
+            count = 0
+            while (flag):
+                count = count + 1
+                if count > max_num:
+                    break
+                nolack_flag, lack_text_list = bool2condition(end_list)
+                true_flag, no_in_text_list = bool2text_alltext(end_list)
+                if nolack_flag and true_flag:
+                    flag = False
+                else:
+                    lack_content = ''
+                    no_in_text_content = ''
+                    temp_list=end_list
+                    temp_list_content = (
+                        f'{temp_list}is all the text that was previously selected, and the words that have been selected before are not in the text space,'
+                        f'All of them should continue to be returned to the user in the list, and the list of the answers should contain all the words that previously met the requirements.')
+                    if not nolack_flag:
+                        lack_content = (
+                            f"{lack_text_list}It's a missing textlist, and you need to identify the image or text again to help me choose{lack_text_list}value。"
+                            f"Again, it is necessary to look at the user's input image or text again to make a judgment, and it is not possible to directly assume the parameter value, and the assumption of the parameter value is not allowed.")
+                    if not true_flag:
+                        connect_tag = '__'
+                        no_in_text_item_list = [connect_tag.join(item.split(connect_tag)[:-1]) for item in
+                                                no_in_text_list]
+                        no_in_text_content = f"{no_in_text_list}It is not available in the text space, and it cannot be selected, so please remove these words from the list. And put{no_in_text_item_list}value to the re-selection。"
+
+                    final_content = temp_list_content + lack_content + no_in_text_content + 'All words that are finally selected must be returned'
+                    messages.append({"role": "user", "content": final_content})
+                    response = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        max_tokens=2000
+                    )
+                    second_time = time.time()
+                    print(f'second_time:{second_time-first_time}')
+                    messages.append({"role": "assistant", "content": response.choices[0].message.content})
+                    gpt_respond=gpt_respond+response.choices[0].message.content
+                    end_list = self.getend_list(response)
+                    if len(no_in_text_list) > 0:
+                        end_list = list(set(end_list) - set(no_in_text_list))
+        gpt_respond = gpt_respond + str(end_list)
+        end_time = time.time()
+        print(f'end_time:{end_time-start_time}')
+        return end_list, gpt_respond
+
+    def picture_caption_gpt(self, image_path, caption, model=None):
+        start_time = time.time()
+        '''Enter the image into LLm to get the content of the list and reply selected by the large model.
+        Args：
+            image_path: The path to the image entered
+            caption: The caption of the image
+            model(string): You need to call the API of the image
+        returns：
+            end_list: The list selected by the large language model
+            response: the reply of the large language model after the end_list has been removed.
+        '''
+        if model is None:
+            model = self.model
+
+        # Provide the path to the local image
+        image_path1 = image_path
+        # Get base64 encoded images
+        base64_image1 = self.encode_image(image_path1)
+        # base64_image2 = encode_image(image_path2)
+        messages = copy.deepcopy(self.messages)
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Perform task one, the caption of the image is {caption}"
                 },
 
                 {
@@ -2190,7 +2222,7 @@ class MMUA():
 
         messages = copy.deepcopy(self.messages)
 
-        messages.append({"role": "user", "content": f'{user_input},To perform task two, no pictures are required。'})
+        messages.append({"role": "user", "content": f'{user_input}, To perform task two, no pictures are required。'})
         # Generate a request and send it to the model
         response = self.client.chat.completions.create(
             model=model,

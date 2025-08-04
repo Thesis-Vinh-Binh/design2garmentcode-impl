@@ -4,6 +4,7 @@ import uuid
 import shutil
 import argparse
 import tqdm
+import pandas as pd
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 
@@ -11,22 +12,30 @@ from helper import category2yaml2json, Category
 from lmm_utils.predict_garmentcode_picture import Predictor
 
 
-def search_picture_files(directory, output_folder_path):
+def search_files(directory, output_folder_path):
     """Search for all image files in the directory"""
-    existing_files = os.listdir(output_folder_path)
     picture_files = []
+    existing_files = os.listdir(output_folder_path)
+    caption_df = pd.read_csv(os.path.join(directory, "captions.csv"))
+    caption_dict = dict(zip(caption_df['filename'], caption_df['caption']))
+    base_names = []
     for root, _, files in os.walk(directory):
         for file in files:
             if file.lower().endswith(('.jpg', '.png', '.jpeg', '.gif')):
                 if os.path.basename(file) in existing_files:
                     continue
                 picture_files.append(os.path.join(root, file))
-    return picture_files
+                base_names.append(os.path.basename(file))
+                
+    missing_captions = [file for file in base_names if file not in caption_dict]
+    if missing_captions:
+        print(f"Warning: {len(missing_captions)} images missing captions, for example: {missing_captions[:5]}")
+    return picture_files, caption_dict
 
 
 def main(input_folder_path, output_folder_path,sim_bool=False):
     dsl_ga = Predictor()
-    all_picture_files = search_picture_files(input_folder_path, output_folder_path)
+    all_picture_files, caption_dict = search_files(input_folder_path, output_folder_path)
     input_output_list = []
     uuid_list = []
     for input_picture_path in all_picture_files:
@@ -44,8 +53,8 @@ def main(input_folder_path, output_folder_path,sim_bool=False):
         uuid_list.append(item_id)
         task = partial(
             category2yaml2json,
-            category=Category.PICTURE,
-            category_data=input_picture_path,
+            category=Category.MIXED,
+            category_data=(input_picture_path, caption_dict[os.path.basename(input_picture_path)]),
             final_json_path=output_json_path,
             id=item_id,
             model='Qwen/Qwen2.5-VL-72B-Instruct',
@@ -85,8 +94,7 @@ def main(input_folder_path, output_folder_path,sim_bool=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Image-to-GarmentCode generation script")
-    parser.add_argument('--input', type=str, required=True, help='Input image folder path')
-    parser.add_argument('--output', type=str, required=True, help='Output folder path')
-    parser.add_argument('--sim', type=bool, default=False, help='Enable simulation mode (default: False)')
+    parser.add_argument('--input', '-i', type=str, required=True, help='Input image folder path')
+    parser.add_argument('--output', '-o', type=str, required=True, help='Output folder path')
     args = parser.parse_args()
-    main(args.input, args.output,args.sim)
+    main(args.input, args.output, False)

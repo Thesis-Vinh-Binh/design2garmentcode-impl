@@ -6,10 +6,17 @@ import json
 import time
 from sim_utils import modelandreturn_picture_path, garmentyaml_folder2json_folder
 from lmm_utils.predict_garmentcode_picture import Predictor
+from enum import Enum 
+
+class Category(Enum):
+    PICTURE = "picture"
+    TEXT = "text"
+    LIST = "list"
+    MIXED = "mixed"
 
 
 def category2yaml2json(
-    category,
+    category: Category,
     category_data,
     final_json_path=None,
     sim_bool=False,
@@ -42,13 +49,19 @@ def category2yaml2json(
     start_time = time.time()
     json_list = []
     picture_path = None
-    if category == "picture":  # The corresponding category_data is the image path
-        json_list, gpt_respond = mmua_llm.picture_gpt(category_data)
-        picture_path = category_data
-    if category == "text":  # The text corresponding to the input
-        json_list, gpt_respond = mmua_llm.text_gpt(category_data)
-    if category == "list":  # It's the list of captions
-        json_list = category_data
+    
+    gpt_func_dict = {
+        Category.PICTURE: mmua_llm.picture_gpt,
+        Category.TEXT: mmua_llm.text_gpt,
+        Category.LIST: lambda x: x,
+        Category.MIXED: mmua_llm.picture_caption_gpt,
+    }
+    
+    if category == Category.MIXED:
+        json_list, gpt_respond = gpt_func_dict[category](*category_data)
+    else:
+        json_list, gpt_respond = gpt_func_dict[category](category_data)
+
     caption_json_list = json_list
     json_list = input_caption2random_default_cption(json_list)
     dsl_ga.caption_json(caption=json_list, id=id,picture_path=picture_path)
