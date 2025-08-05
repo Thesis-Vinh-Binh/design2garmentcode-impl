@@ -2090,11 +2090,21 @@ class MMUA():
 
                     final_content = temp_list_content + lack_content + no_in_text_content + 'All words that are finally selected must be returned'
                     messages.append({"role": "user", "content": final_content})
-                    response = self.client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        max_tokens=2000
-                    )
+                    print(f'messages: {messages}')
+                    try:
+                        response = self.client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_tokens=2000
+                        )
+                    except Exception as e:
+                        print(f'error: {e}')
+                        time.sleep(10)
+                        response = self.client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_tokens=2000
+                        )
                     second_time = time.time()
                     print(f'second_time:{second_time-first_time}')
                     messages.append({"role": "assistant", "content": response.choices[0].message.content})
@@ -2144,14 +2154,24 @@ class MMUA():
 
             ]
         })
-
+        print(f'messages: {messages}')
 
         # Generate a request and send it to the model
-        response = self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=2000
-        )
+        try:
+          response = self.client.chat.completions.create(
+               model=model,
+               messages=messages,
+               max_tokens=2000
+          )
+        # if error due to rate limit, sleep for 10 seconds
+        except Exception as e:
+            print(f'error: {e}')
+            time.sleep(10)
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=2000
+            )
         first_time = time.time()
         print(f'first_time:{first_time-start_time}')
         messages.append({"role": "assistant", "content": response.choices[0].message.content})
